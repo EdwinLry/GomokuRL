@@ -1,7 +1,7 @@
 import random
 from torch import nn, optim
 import torch
-
+import gamestate
 
 class GomokuAI(nn.Module):
     def __init__(self, board_size=15, player=2):
@@ -30,28 +30,44 @@ class GomokuAI(nn.Module):
         )
 
     def select_action(self, state):
+        flatten_state = state.flatten()
+        valid_moves = [i for i, cell in enumerate(flatten_state) if cell == 0]
+
         if random.random() < self.epsilon:
-            return random.randint(0, self.board_size * self.board_size - 1)
+            return random.choice(valid_moves)
+
         # Convert state to a tensor and move it to the device
         state_tensor = torch.FloatTensor(state.flatten()).unsqueeze(0).to(self.device)
         with torch.no_grad():
             q_values = self.model(state_tensor)
-        return torch.argmax(q_values).item()
+
+        # Create a mask where invalid moves are set to -infinity.
+        mask = torch.full(q_values.shape, -float('inf')).to(self.device)
+        mask[0, valid_moves] = 0  # Valid moves get a 0 offset
+
+        # Apply the mask: invalid moves will be q_value + (-infinity) = -infinity.
+        masked_q_values = q_values + mask
+        return torch.argmax(masked_q_values).item()
 
     def store_experience(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
         if len(self.memory) > 2000:
             self.memory.pop(0)
 
-    def compute_reward(self, winner, current_player, valid_move=True, game_state=None, move=None):
-        if not valid_move:
-            return -5  # Penalty for invalid moves
+    def compute_reward(self, winner, current_player, board, move=None):
 
+        x, y = divmod(move, self.board_size)
+        move = (x, y)
         if winner == current_player:
             return 1  # Reward for winning
 
         if winner == 3 - current_player:
             return -1  # Penalty for losing
+
+        if gamestate.check_open(board, move, 3):
+            return 0.5
+        if gamestate.check_open(board, move, 4):
+            return 0.75
 
         return 0  # Default neutral move
 

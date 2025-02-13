@@ -35,7 +35,10 @@ def run_game():
 def train_ai(num_episodes=1000, save_interval=50, train_every=10):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     ai = GomokuAI().to(device)
-    ai.load()
+    try:
+        ai.load()
+    except Exception as e:
+        print(f"Failed to load model:{e}. Starting with new model")
     ai.save(filename="previous_ai.pth")
     for episode in range(num_episodes):
         game = gamelogic.Gomoku()
@@ -55,7 +58,7 @@ def train_ai(num_episodes=1000, save_interval=50, train_every=10):
                 ai.store_experience(state, action, reward, next_state, done)
                 invalid_moves += 1
             else:
-                reward = ai.compute_reward(winner, game.current_player)
+                reward = ai.compute_reward(winner, game.current_player, next_state, action)
                 ai.store_experience(state, action, reward, next_state, done)
 
             step_counter += 1
@@ -72,7 +75,7 @@ def train_ai(num_episodes=1000, save_interval=50, train_every=10):
 
         # Final training at end of episode (if any experiences are left)
         ai.train()
-        print(f"Episode {episode} finished after {step_counter} steps. With {invalid_moves} invalid moves.")
+        # print(f"Episode {episode} finished after {step_counter} steps. With {invalid_moves} invalid moves.")
         if episode % save_interval == 0:
             ai.save()
             print(f"Episode {episode}:\n {game.board}\n")
@@ -94,30 +97,28 @@ def evaluate_agent(num_games=100):
         while not done:
             if game.current_player == 1:
                 action = current_agent.select_action(state)
-                print(1)
             else:
                 action = opponent_agent.select_action(state)
-                print(2)
             x, y = divmod(action, current_agent.board_size)
-            print(f"Player {game.current_player} moves: ({x}, {y})")
             next_state, winner = game.make_move(x, y)
             if next_state is None:
                 print("Invalid move.")
                 done = True
             state = next_state
-            if winner is not None:
+            if winner:
                 done = True
-                if winner == 2:
+                if winner == 1:
                     wins += 1
             if game.is_full():
                 print("Tie.")
                 done = True
         print(f"{game.board}\n")
+        print(f"Win rate: {wins / (i + 1)}")
     return wins / num_games
 
 def main():
     torch.set_default_device("cuda" if torch.cuda.is_available() else "cpu")
-    #evaluate_agent(1)
+    #evaluate_agent(100)
     train_ai()
     #run_game()
 
